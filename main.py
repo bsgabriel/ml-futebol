@@ -31,88 +31,106 @@ def split_train_test(data, train_size=0.8):
 # Inicialização dos pesos
 def initialize_weights(input_size, hidden_size, output_size):
     np.random.seed(42)
-    weights_hidden_input = np.random.rand(input_size, hidden_size)
-    weights_hidden_output = np.random.rand(hidden_size, output_size)
+    weights_hidden_input = np.random.rand(input_size, hidden_size) * 0.01
+    weights_hidden_output = np.random.rand(hidden_size, output_size) * 0.01
     return weights_hidden_input, weights_hidden_output
 
-# Propagação para frente
-def forward_propagation(features, weights_hidden_input, weights_hidden_output):
-    linear_combination_input_hidden = np.dot(features, weights_hidden_input)
-    activation_hidden = 1 / (1 + np.exp(-linear_combination_input_hidden))  # Sigmoid
-    
-    linear_combination_hidden_output = np.dot(activation_hidden, weights_hidden_output)
-    activation_output = 1 / (1 + np.exp(-linear_combination_hidden_output))  # Sigmoid
-    
-    return linear_combination_input_hidden, activation_hidden, linear_combination_hidden_output, activation_output
+def sigmoid(x):
+    return 1 / (1 + np.exp(-x))
 
-# Ajuste dos pesos usando retropropagação
-def backward_propagation(features, labels, linear_combination_input_hidden, activation_hidden, activation_output, weights_hidden_input, weights_hidden_output, learning_rate=0.01, momentum=0.9, alpha=0.2):
-    num_samples = features.shape[0]
+def sigmoid_derivative(x):
+    return x * (1 - x)
+
+def matrix_mult(A, B):
+    result = np.zeros((A.shape[0], B.shape[1]))
+    for i in range(A.shape[0]):
+        for j in range(B.shape[1]):
+            result[i, j] = np.sum(A[i, :] * B[:, j])
+    return result
+
+def forward_propagation(inputs, weights_hidden_input, weights_hidden_output):
+    hidden_layer_input = matrix_mult(inputs, weights_hidden_input)
+    hidden_layer_output = sigmoid(hidden_layer_input)
     
-    # Erro da camada de saída
-    error_output = activation_output - labels
-    gradient_hidden_output = (1/num_samples) * np.dot(activation_hidden.T, error_output)
+    output_layer_input = matrix_mult(hidden_layer_output, weights_hidden_output)
+    output_layer_output = sigmoid(output_layer_input)
     
-    # Erro da camada oculta
-    error_hidden = np.dot(error_output, weights_hidden_output.T) * (activation_hidden * (1 - activation_hidden))
-    gradient_input_hidden = (1/num_samples) * np.dot(features.T, error_hidden)
+    return hidden_layer_output, output_layer_output
+
+def backward_propagation(inputs, hidden_layer_output, output_layer_output, labels, weights_hidden_input, weights_hidden_output, learning_rate, momentum):
     
-    # Atualização dos pesos
-    weights_hidden_input = weights_hidden_input * momentum + alpha * gradient_input_hidden
-    weights_hidden_output = weights_hidden_output * momentum + alpha * gradient_hidden_output
+    output_error = labels - output_layer_output
+    output_delta = output_layer_output * (1 - output_layer_output) * output_error
+    
+    hidden_error = matrix_mult(output_delta, weights_hidden_output.T)
+    hidden_delta = hidden_layer_output * (1 - hidden_layer_output) * hidden_error
+    
+    weights_hidden_output = weights_hidden_output * momentum + learning_rate * matrix_mult(hidden_layer_output.T, output_delta)
+    weights_hidden_input = weights_hidden_input * momentum + learning_rate * matrix_mult(inputs.T, hidden_delta)
     
     return weights_hidden_input, weights_hidden_output
 
-# Perda (cross-entropy)
-def compute_cross_entropy_loss(labels, activation_output):
-    num_samples = labels.shape[0]
-    logprobs = np.multiply(np.log(activation_output), labels)
-    loss = -np.sum(logprobs) / num_samples
-    return loss
-
-# Treinar o modelo
-def train_neural_network(features_train, labels_train, input_size, hidden_size, output_size, epochs=1000, learning_rate=0.01):
+def train_model(features_train, labels_train, input_size, hidden_size, output_size, 
+                epochs, learning_rate, momentum):
     weights_hidden_input, weights_hidden_output = initialize_weights(input_size, hidden_size, output_size)
     
     for epoch in range(epochs):
-        linear_combination_input_hidden, activation_hidden, linear_combination_hidden_output, activation_output = forward_propagation(features_train, weights_hidden_input, weights_hidden_output)
-        loss = compute_cross_entropy_loss(labels_train, activation_output)
-        weights_hidden_input, weights_hidden_output = backward_propagation(features_train, labels_train, linear_combination_input_hidden, activation_hidden, activation_output, weights_hidden_input, weights_hidden_output, learning_rate)
+        hidden_layer_output, output_layer_output = forward_propagation(features_train, weights_hidden_input, weights_hidden_output)
+        weights_hidden_input, weights_hidden_output = backward_propagation(
+            features_train, hidden_layer_output, output_layer_output, labels_train, 
+            weights_hidden_input, weights_hidden_output, learning_rate, momentum
+        )
         
-        if epoch % 100 == 0:
-            print(f"Epoch {epoch}, Loss: {loss}")
+        if epoch % 5 == 0:
+            error = np.mean(np.abs(labels_train - output_layer_output))
+            print(f"Epoch {epoch}, Error: {error}")
     
     return weights_hidden_input, weights_hidden_output
 
-# Fazer predições
 def predict(features, weights_hidden_input, weights_hidden_output):
-    _, _, _, activation_output = forward_propagation(features, weights_hidden_input, weights_hidden_output)
-    return np.argmax(activation_output, axis=1)
+    _, output_layer_output = forward_propagation(features, weights_hidden_input, weights_hidden_output)
+    return output_layer_output
 
-# Função principal para executar o script
 if __name__ == "__main__":
-    # 1. Carregar e preparar os dados
+        # 1. Carregar e preparar os dados
     data = get_data()
 
     # 2. Dividir os dados em treinamento e teste
     train_data, test_data = split_train_test(data)
     
     # 3. Separar dados de entrada (features) e rótulos (labels)
-    features_train = train_data.drop(columns=['FTR_H', 'FTR_D', 'FTR_A']).values
-    labels_train = train_data[['FTR_H', 'FTR_D', 'FTR_A']].values
-    features_test = test_data.drop(columns=['FTR_H', 'FTR_D', 'FTR_A']).values
-    labels_test = test_data[['FTR_H', 'FTR_D', 'FTR_A']].values
+    ftr_columns = ['FTR_H', 'FTR_D', 'FTR_A']
+    features_train = train_data.drop(columns=ftr_columns).values
+    labels_train = train_data[ftr_columns].values
+    features_test = test_data.drop(columns=ftr_columns).values
+    labels_test = test_data[ftr_columns].values
 
     # 4. Definir hiperparâmetros
     input_size = features_train.shape[1]  # Número de features de entrada
-    hidden_size = 50  # Número de neurônios na camada oculta
+    hidden_size = 20  # Número de neurônios na camada oculta
     output_size = 3  # Número de classes (vitória casa, empate, vitória fora)
 
     # 5. Treinar o modelo
-    weights_hidden_input, weights_hidden_output = train_neural_network(features_train, labels_train, input_size, hidden_size, output_size, epochs=1000, learning_rate=0.01)
+    epochs = 200
+    learning_rate = 0.01
+    momentum = 1
+
+    # 5. Treinar o modelo
+    weights_hidden_input, weights_hidden_output = train_model(
+        features_train, labels_train, input_size, hidden_size, output_size, 
+        epochs, learning_rate, momentum
+    )
 
     # 6. Fazer previsões com os dados de teste
     predictions = predict(features_test, weights_hidden_input, weights_hidden_output)
-    
-    # Mostrar as predições
-    print("Predictions:", predictions)
+
+    # 7. Avaliar o modelo
+    accuracy = np.mean(np.argmax(predictions, axis=1) == np.argmax(labels_test, axis=1))
+    print(f"Acurácia do modelo: {accuracy:.2f}")
+
+    # 8. Mostrar algumas predições
+    print("\nAlgumas predições:")
+    for i in range(50):
+        true_label = np.argmax(labels_test[i])
+        predicted_label = np.argmax(predictions[i])
+        print(f"Real: {true_label}, Previsto: {predicted_label}")
