@@ -1,5 +1,11 @@
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.metrics import confusion_matrix, classification_report, roc_auc_score
+from sklearn.metrics import roc_curve, precision_recall_fscore_support
+import seaborn as sns
+
+### FUNÇÕES DA REDE NEURAL ###
 
 def get_data():
     columns_to_remove = [
@@ -68,31 +74,123 @@ def backward_propagation(inputs, hidden_layer_output, output_layer_output, label
     weights_hidden_output = weights_hidden_output * momentum + learning_rate * matrix_mult(hidden_layer_output.T, output_delta)
     weights_hidden_input = weights_hidden_input * momentum + learning_rate * matrix_mult(inputs.T, hidden_delta)
     
-    return weights_hidden_input, weights_hidden_output
+    return weights_hidden_input, weights_hidden_output, output_error
 
-def train_model(features_train, labels_train, input_size, hidden_size, output_size, 
-                epochs, learning_rate, momentum):
+def train_model(features_train, labels_train, input_size, hidden_size, output_size, epochs, learning_rate, momentum):
     weights_hidden_input, weights_hidden_output = initialize_weights(input_size, hidden_size, output_size)
+    error_list = []
     
     for epoch in range(epochs):
         hidden_layer_output, output_layer_output = forward_propagation(features_train, weights_hidden_input, weights_hidden_output)
-        weights_hidden_input, weights_hidden_output = backward_propagation(
+        
+        weights_hidden_input, weights_hidden_output, output_error = backward_propagation(
             features_train, hidden_layer_output, output_layer_output, labels_train, 
             weights_hidden_input, weights_hidden_output, learning_rate, momentum
         )
-        
-        if epoch % 5 == 0:
+
+        error = np.mean(np.abs(output_error))
+        error_list.append(error)
+
+        if epoch % 10 == 0:
             error = np.mean(np.abs(labels_train - output_layer_output))
             print(f"Epoch {epoch}, Error: {error}")
     
-    return weights_hidden_input, weights_hidden_output
+    return weights_hidden_input, weights_hidden_output, error_list
 
 def predict(features, weights_hidden_input, weights_hidden_output):
     _, output_layer_output = forward_propagation(features, weights_hidden_input, weights_hidden_output)
     return output_layer_output
 
+### FUNÇÕES DE MÉTRICAS ###
+
+# Calcular a acurácia a partir da matriz de confusão
+def calculate_accuracy(conf_matrix):
+    vp_vn = np.trace(conf_matrix)  # Soma dos elementos da diagonal
+    total_elements = np.sum(conf_matrix)
+    accuracy = vp_vn / total_elements
+    return accuracy
+
+def evaluate_model(predictions, labels_test):
+    y_true = np.argmax(labels_test, axis=1)
+    y_pred = np.argmax(predictions, axis=1)
+    
+    conf_matrix = confusion_matrix(y_true, y_pred)
+    print(f"Matriz de confusão:\n{conf_matrix}")
+    
+    accuracy = calculate_accuracy(conf_matrix)
+    print(f"Acurácia (usando matriz de confusão): {accuracy:.2f}")
+    
+    plt.figure(figsize=(8,6))
+    sns.heatmap(conf_matrix, annot=True, fmt='d', cmap='Blues', xticklabels=['Vitória Casa', 'Empate', 'Vitória Fora'], 
+                yticklabels=['Vitória Casa', 'Empate', 'Vitória Fora'])
+    plt.ylabel('Classe Real')
+    plt.xlabel('Classe Predita')
+    plt.title('Matriz de Confusão')
+    plt.show()
+
+    class_report = classification_report(y_true, y_pred, target_names=['Vitória Casa', 'Empate', 'Vitória Fora'])
+    print(f"Relatório de classificação:\n{class_report}")
+    
+    auc = roc_auc_score(labels_test, predictions, multi_class='ovr')
+    print(f"AUC: {auc:.2f}")
+
+    return accuracy, auc
+
+def plot_roc_curve(labels_test, predictions):
+    plt.figure(figsize=(10, 8))
+    
+    for i in range(predictions.shape[1]):
+        fpr, tpr, _ = roc_curve(labels_test[:, i], predictions[:, i])
+        plt.plot(fpr, tpr, label=f'Classe {i}: AUC = {roc_auc_score(labels_test[:, i], predictions[:, i]):.2f}')
+    
+    plt.plot([0, 1], [0, 1], 'k--')  # linha de referência
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('Taxa de Falsos Positivos')
+    plt.ylabel('Taxa de Verdadeiros Positivos')
+    plt.title('Curvas ROC')
+    plt.legend(loc="lower right")
+    plt.show()
+
+def plot_precision_recall(labels_test, predictions):
+    precision, recall, f1, _ = precision_recall_fscore_support(np.argmax(labels_test, axis=1), np.argmax(predictions, axis=1))
+    
+    classes = ['Vitória Casa', 'Empate', 'Vitória Fora']
+    
+    x = np.arange(len(classes))
+    
+    plt.bar(x - 0.2, precision, width=0.2, label='Precisão', color='blue')
+    plt.bar(x, recall, width=0.2, label='Revocação', color='orange')
+    plt.bar(x + 0.2, f1, width=0.2, label='F1 Score', color='green')
+    
+    plt.xlabel('Classes')
+    plt.ylabel('Scores')
+    plt.title('Precisão, Revocação e F1 Score por Classe')
+    plt.xticks(x, classes)
+    plt.legend()
+    plt.show()
+
+def plot_error_over_epochs(error_list):
+    plt.plot(error_list)
+    plt.xlabel('Épocas')
+    plt.ylabel('Erro Médio')
+    plt.title('Erro Médio ao Longo das Épocas')
+    plt.show()
+
+def plot_prediction_distribution(predictions):
+    pred_labels = np.argmax(predictions, axis=1)
+    counts = np.bincount(pred_labels)
+    
+    classes = ['Vitória Casa', 'Empate', 'Vitória Fora']
+    
+    plt.bar(classes, counts)
+    plt.xlabel('Classes')
+    plt.ylabel('Número de Predições')
+    plt.title('Distribuição das Predições do Modelo')
+    plt.show()
+
 if __name__ == "__main__":
-        # 1. Carregar e preparar os dados
+    # 1. Carregar e preparar os dados
     data = get_data()
 
     # 2. Dividir os dados em treinamento e teste
@@ -115,22 +213,19 @@ if __name__ == "__main__":
     learning_rate = 0.01
     momentum = 1
 
-    # 5. Treinar o modelo
-    weights_hidden_input, weights_hidden_output = train_model(
+    weights_hidden_input, weights_hidden_output, error_list = train_model(
         features_train, labels_train, input_size, hidden_size, output_size, 
         epochs, learning_rate, momentum
     )
 
-    # 6. Fazer previsões com os dados de teste
+    # 5. Fazer previsões
     predictions = predict(features_test, weights_hidden_input, weights_hidden_output)
 
-    # 7. Avaliar o modelo
-    accuracy = np.mean(np.argmax(predictions, axis=1) == np.argmax(labels_test, axis=1))
-    print(f"Acurácia do modelo: {accuracy:.2f}")
+    # 6. Avaliar o modelo
+    accuracy, auc = evaluate_model(predictions, labels_test)
 
-    # 8. Mostrar algumas predições
-    print("\nAlgumas predições:")
-    for i in range(50):
-        true_label = np.argmax(labels_test[i])
-        predicted_label = np.argmax(predictions[i])
-        print(f"Real: {true_label}, Previsto: {predicted_label}")
+    # 7. Plotar gráficos
+    plot_roc_curve(labels_test, predictions)
+    plot_precision_recall(labels_test, predictions)
+    plot_error_over_epochs(error_list)
+    plot_prediction_distribution(predictions)
