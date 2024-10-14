@@ -110,7 +110,7 @@ def calculate_accuracy(conf_matrix):
     accuracy = vp_vn / total_elements
     return accuracy
 
-def evaluate_model(predictions, labels_test):
+def plot_confusion_matrix(predictions, labels_test):
     y_true = np.argmax(labels_test, axis=1)
     y_pred = np.argmax(predictions, axis=1)
     
@@ -120,13 +120,14 @@ def evaluate_model(predictions, labels_test):
     accuracy = calculate_accuracy(conf_matrix)
     print(f"Acurácia (usando matriz de confusão): {accuracy:.2f}")
     
+    plt.clf()
     plt.figure(figsize=(8,6))
     sns.heatmap(conf_matrix, annot=True, fmt='d', cmap='Blues', xticklabels=['Vitória Casa', 'Empate', 'Vitória Fora'], 
                 yticklabels=['Vitória Casa', 'Empate', 'Vitória Fora'])
     plt.ylabel('Classe Real')
     plt.xlabel('Classe Predita')
     plt.title('Matriz de Confusão')
-    plt.show()
+    plt.savefig("matriz_confusao.png")
 
     class_report = classification_report(y_true, y_pred, target_names=['Vitória Casa', 'Empate', 'Vitória Fora'])
     print(f"Relatório de classificação:\n{class_report}")
@@ -134,14 +135,13 @@ def evaluate_model(predictions, labels_test):
     auc = roc_auc_score(labels_test, predictions, multi_class='ovr')
     print(f"AUC: {auc:.2f}")
 
-    return accuracy, auc
-
 def plot_roc_curve(labels_test, predictions):
+    plt.clf()
     plt.figure(figsize=(10, 8))
-    
+    classes = ['Vitória Casa', 'Empate', 'Vitória Fora']
     for i in range(predictions.shape[1]):
         fpr, tpr, _ = roc_curve(labels_test[:, i], predictions[:, i])
-        plt.plot(fpr, tpr, label=f'Classe {i}: AUC = {roc_auc_score(labels_test[:, i], predictions[:, i]):.2f}')
+        plt.plot(fpr, tpr, label=f'{classes[i]}: AUC = {roc_auc_score(labels_test[:, i], predictions[:, i]):.2f}')
     
     plt.plot([0, 1], [0, 1], 'k--')  # linha de referência
     plt.xlim([0.0, 1.0])
@@ -150,7 +150,7 @@ def plot_roc_curve(labels_test, predictions):
     plt.ylabel('Taxa de Verdadeiros Positivos')
     plt.title('Curvas ROC')
     plt.legend(loc="lower right")
-    plt.show()
+    plt.savefig('curvas_roc.png')
 
 def plot_precision_recall(labels_test, predictions):
     precision, recall, f1, _ = precision_recall_fscore_support(np.argmax(labels_test, axis=1), np.argmax(predictions, axis=1))
@@ -159,6 +159,7 @@ def plot_precision_recall(labels_test, predictions):
     
     x = np.arange(len(classes))
     
+    plt.clf()
     plt.bar(x - 0.2, precision, width=0.2, label='Precisão', color='blue')
     plt.bar(x, recall, width=0.2, label='Revocação', color='orange')
     plt.bar(x + 0.2, f1, width=0.2, label='F1 Score', color='green')
@@ -168,14 +169,15 @@ def plot_precision_recall(labels_test, predictions):
     plt.title('Precisão, Revocação e F1 Score por Classe')
     plt.xticks(x, classes)
     plt.legend()
-    plt.show()
+    plt.savefig('precision_recall.png')
 
 def plot_error_over_epochs(error_list):
+    plt.clf()
     plt.plot(error_list)
     plt.xlabel('Épocas')
     plt.ylabel('Erro Médio')
     plt.title('Erro Médio ao Longo das Épocas')
-    plt.show()
+    plt.savefig('erro_medio_epocas.png')
 
 def plot_prediction_distribution(predictions):
     pred_labels = np.argmax(predictions, axis=1)
@@ -183,11 +185,12 @@ def plot_prediction_distribution(predictions):
     
     classes = ['Vitória Casa', 'Empate', 'Vitória Fora']
     
+    plt.clf()
     plt.bar(classes, counts)
     plt.xlabel('Classes')
     plt.ylabel('Número de Predições')
     plt.title('Distribuição das Predições do Modelo')
-    plt.show()
+    plt.savefig('distribuicao_predicoes.png')
 
 if __name__ == "__main__":
     # 1. Carregar e preparar os dados
@@ -209,7 +212,7 @@ if __name__ == "__main__":
     output_size = 3  # Número de classes (vitória casa, empate, vitória fora)
 
     # 5. Treinar o modelo
-    epochs = 200
+    epochs = 1000
     learning_rate = 0.01
     momentum = 1
 
@@ -221,10 +224,8 @@ if __name__ == "__main__":
     # 5. Fazer previsões
     predictions = predict(features_test, weights_hidden_input, weights_hidden_output)
 
-    # 6. Avaliar o modelo
-    accuracy, auc = evaluate_model(predictions, labels_test)
-
-    # 7. Plotar gráficos
+    # 6. Plotar gráficos
+    plot_confusion_matrix(predictions, labels_test)
     plot_roc_curve(labels_test, predictions)
     plot_precision_recall(labels_test, predictions)
     plot_error_over_epochs(error_list)
